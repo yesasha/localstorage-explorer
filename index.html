@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<!--
+Copyright (c) 2018 by Aleksandr Yefremov (https://codepen.io/yesasha/pen/ppdyWL)
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+-->
+<title>LocalStorage Explorer</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel='stylesheet' href='https://www.w3schools.com/w3css/4/w3.css'>
+<style type="text/css">
+html {
+  overflow: auto;
+}
+.asc::after {
+  content: "\25b4";
+}
+.dsc::after {
+  content: "\25be";
+}
+.index {
+  width: 64px !important;
+}
+.delall {
+  width: 32px !important;
+}
+th, td {
+  border: 1px solid #ccc!important;
+}
+</style>
+</head>
+<body>
+<main class="w3-container">
+  <h1>LocalStorage Explorer</h1>
+  <div class="w3-panel w3-pale-red w3-leftbar w3-border-red status">
+    <p>LocalStorage is not available...</p>
+  </div>
+  <table class="w3-table">
+    <thead>
+      <tr>
+        <th class="w3-button index asc" title="Sort by index">#</th>
+        <th class="w3-button key" title="Sort by key">Key</th>
+        <th class="w3-button value" title="Sort by value">Value</th>
+        <th class="w3-button delall" title="Delete all items">&#x2716;</th>
+      </tr>
+      <tr>
+        <td>&gt;&gt;</td>
+        <td style="padding:0;"><input autocomplete="off" spellcheck="false" class="w3-input w3-border-0" type="text"></td>
+        <td style="padding:0;"><input autocomplete="off" spellcheck="false" class="w3-input w3-border-0" type="text"></td>
+        <td class="w3-button add" title="Set or add item">&#x271A;</td>
+      </tr>
+    </thead>
+    <tbody>
+    </tbody>
+  </table>
+</main>
+<script type="text/javascript">
+// Get all needed elements
+var myStatus = document.getElementsByClassName('status')[0];
+var myTable = document.getElementsByTagName('table')[0];
+var key = myTable.getElementsByTagName('input');
+var val = key[1];
+key = key[0];
+var th = myTable.tHead.rows[0].cells;
+var myTbody = myTable.tBodies[0];
+var tr = myTbody.rows;
+
+// Array representation of the table
+var tBodyArray = [];
+
+// Sorting method
+var sortingDirection;
+var sortingCol;
+
+var isStorage = storageAvailable('localStorage');
+
+var renderRequested;
+rAFThrottler(0, true);
+
+// Rerender if other tab/window changes data
+addEventListener('storage', function() {  
+  rAFThrottler();
+});
+
+// Click handler
+myTable.addEventListener('click', function (ev) {
+  var classList = ev.target.classList;
+  var direction = !classList.contains('asc');
+  if (classList.contains('add')) {
+    key.focus();
+    localStorage.setItem(key.value.trim(), val.value.trim());
+    key.value = '';
+    val.value = '';
+    rAFThrottler();
+  } else if (classList.contains('del')) {
+    localStorage.removeItem(ev.target.getAttribute('data-key'));
+    rAFThrottler();
+  } else if (classList.contains('delall')) {
+    if (confirm("Are you sure you want to delete all items?")) {
+      localStorage.clear();
+      rAFThrottler();
+    }
+  } else if (classList.contains('index')) {
+    rAFThrottler(0, direction);
+  } else if (classList.contains('key')) {
+    rAFThrottler(1, direction);
+  } else if (classList.contains('value')) {
+    rAFThrottler(2, direction);
+  }
+}, false);
+
+function render (col, dir) {
+  myStatus.classList.remove('w3-pale-red');
+  myStatus.classList.remove('w3-border-red');
+  myStatus.classList.add('w3-pale-green');
+  myStatus.classList.add('w3-border-green');
+
+  if (localStorage.length === 0) {
+    myStatus.innerHTML = '<p>LocalStorage is empty...</p>';
+  } else if (localStorage.length === 1) {
+    myStatus.innerHTML = '<p>You have 1 item in localStorage.</p>';
+  } else {
+    myStatus.innerHTML = '<p>You have ' + localStorage.length + ' items in localStorage.</p>';
+  }
+
+  // Remove all sorting classes from table header row
+  for (var i = 0; i < 3; i++) {
+    th[i].classList.remove('asc');
+    th[i].classList.remove('dsc');
+  }
+
+  // Set the new class for the column
+  th[sortingCol].classList.add(sortingDirection ? 'asc' : 'dsc');
+
+  // New array representation
+  var newArr = [];
+
+  // localStorage to array
+  for (var i = 0; i < localStorage.length; i++) {
+    var key = localStorage.key(i);
+    newArr[i] = [i, key, localStorage.getItem(key)];
+  }
+
+  // Sort according to current user selected method
+  newArr.sort(function (a, b) {
+    return myCompare(a[sortingCol], b[sortingCol], sortingDirection ? 1 : -1);
+  });
+
+  // Compare old table vs new table and if not match, refresh the data in the table.
+  for (var i = 0; i < newArr.length; i++) {
+    var oldRow = tBodyArray[i];
+    var newRow = newArr[i];
+    if (tr[i]) {
+      var cells = tr[i].cells;
+      if (!oldRow || oldRow[0] !== newRow[0]) { // Index
+          cells[0].textContent = newRow[0];
+      }
+      if (!oldRow || oldRow[1] !== newRow[1]) { // Key
+          cells[1].textContent = newRow[1];
+          cells[3].setAttribute('data-key', newRow[1]); // Delete button
+      }
+      if (!oldRow || oldRow[2] !== newRow[2]) { // Value
+          cells[2].textContent = newRow[2];
+      }
+    } else {
+      myTbody.insertAdjacentHTML('beforeend', '<tr><td>' + newRow[0] + '</td><td>' + newRow[1] + '</td><td>' + newRow[2] + '</td><td class="w3-button del" title="Delete this item" data-key="' + newRow[1] + '">&#x2716;</td></tr>');
+    }
+  }
+  
+  // Delete all remaining rows from html
+  while (newArr.length < myTbody.rows.length) {
+    myTbody.removeChild(myTbody.lastElementChild);
+  }
+
+  // Save new table
+  tBodyArray = newArr;
+
+  renderRequested = false;
+}
+
+function rAFThrottler (col, dir) {
+  if (!isStorage) {
+    return;
+  }
+
+  sortingCol = col === void(0) ? sortingCol : col;
+  sortingDirection = dir === void(0) ? sortingDirection : dir;
+
+  if (renderRequested) {
+    return;
+  }
+
+  renderRequested = true;
+  requestAnimationFrame(render, myTable);
+}
+
+// Comparison function. I want strings to be sorted as strings, and numbers as numbers.
+function myCompare (a, b, dir) {
+  if (isNumeric(a)) {
+    if (isNumeric(b)) {
+      return dir * (a - b);
+    } else {
+      return -dir;
+    }
+  } else {
+    if (isNumeric(b)) {
+      return dir;
+    } else {
+      a = a.toLowerCase();
+      b = b.toLowerCase();
+      if (a > b) {
+        return dir;
+      }
+      if (a < b) {
+        return -dir;
+      }
+      return 0;
+    }
+  }
+}
+
+function isNumeric (n) {
+  return !isNaN(parseFloat(n)) && isFinite(n);
+}
+
+function storageAvailable (type) {
+  try {
+    var storage = window[type],
+        x = '__storage_test__';
+    storage.setItem(x, x);
+    storage.removeItem(x);
+    return true;
+  }
+  catch(e) {
+    return e instanceof DOMException && (
+      // everything except Firefox
+      e.code === 22 ||
+      // Firefox
+      e.code === 1014 ||
+      // test name field too, because code might not be present
+      // everything except Firefox
+      e.name === 'QuotaExceededError' ||
+      // Firefox
+      e.name === 'NS_ERROR_DOM_QUOTA_REACHED') &&
+      // acknowledge QuotaExceededError only if there's something already stored
+      storage.length !== 0;
+  }
+}
+</script>
+</body>
+</html>
